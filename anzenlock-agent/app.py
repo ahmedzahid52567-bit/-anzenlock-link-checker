@@ -12,20 +12,27 @@ from link_checker import check_link
 load_dotenv()
 app = Flask(__name__)
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-MODEL = "gemini-2.5-flash"
+# Nov 2026: Google serves gemini-2.5-flash only to projects that already used it.
+# New keys get 404 on 2.5, so try the current models first, 2.5 last.
+MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
 
 def ask_gemini(prompt):
-    """Real Gemini API call. Returns text, or a clear message if no key."""
+    """Real Gemini API call. Tries each model until one answers."""
     if not GEMINI_KEY or GEMINI_KEY == "PASTE_YOUR_KEY_HERE":
         return "Gemini key not set yet. Put your key in the .env file, restart the app, and try again."
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_KEY}"
-        r = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=30)
-        r.raise_for_status()
-        data = r.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception as e:
-        return f"Gemini call failed: {e}. Check your key in .env and your internet, then try again."
+    last_err = ""
+    for model in MODELS:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_KEY}"
+            r = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=30)
+            r.raise_for_status()
+            data = r.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception as e:
+            # Never show the key: the error text contains the request URL with ?key=...
+            last_err = str(e).replace(GEMINI_KEY, "[key hidden]")
+            continue
+    return f"Gemini call failed: {last_err}. Check your key in .env and your internet, then try again."
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AnzenLock Agent — Team SmartZ | AgentX PS-07</title>
