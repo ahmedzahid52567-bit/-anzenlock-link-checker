@@ -5,17 +5,24 @@ An AI agent, not a chatbot. It plans, uses real tools, and gives you a fix plan 
 **Problem:** people lose money clicking scam links in SMS and WhatsApp.
 **Flow:** You ask → Agent plans → Agent checks → Fix plan → You follow it.
 
+## Pages (separate, in order)
+1. `/` — **Landing:** paste a link, click "Check this link". Nothing else on the page.
+2. `/permissions` — **Permission Guard:** tick what the app asks for (Location / Contacts / SMS / Camera / Microphone), or skip this step.
+3. `/result` — **Verdict + fix:** Safe / Suspicious / Dangerous score, Gemini explanation in simple words, 3-step fix plan, and the permission flags.
+4. `/health` — **Optional:** Device Health Score from free storage and outdated apps.
+
 ## What it does
 1. **Link Checker (real tool)** — scores a link Safe / Suspicious / Dangerous (100 / 75 / 15 on the tested demos).
-2. **Gemini API (real call)** — explains the verdict in simple words and gives a 3-step fix plan.
+2. **Gemini API (real call)** — explains the verdict in simple words and gives a 3-step fix plan. Tries gemini-3.8-flash, then gemini-3.5-flash-lite, then gemini-2.5-flash (Google limits 2.5 to projects that already used it).
 3. **Permission Guard** — flags risky app permissions (Location / Contacts / SMS).
 4. **Device Health Score** — simple score from free storage and outdated apps.
 5. **You decide** — the agent gives the verdict and a clear fix plan (block sender, delete message, report it). Nothing runs automatically; you follow the plan.
 
-## Demo links (1-click in the app)
+## Demo links
 - Safe: https://google.com
 - Suspicious: https://bit.ly/abc
 - Dangerous: http://192.168.1.1/kyc-blocked-verify-now
+- Dangerous 20/100: https://192.168.1.1/kyc-blocked-verify-now-urgent-lottery-winner-free-recharge-account-locked-bank-update-suspended-prize-claim-now
 
 ## Run it locally
 ```bash
@@ -26,7 +33,7 @@ python app.py
 ```
 
 ## Deploy it (free, SnapDeploy)
-Start command: `python app.py` · Port: `5000` · Set env var `GEMINI_API_KEY` in the host dashboard (never in the repo).
+Root directory: `anzenlock-agent` · Start command: `python app.py` · Port: `5000` · Set env var `GEMINI_API_KEY` in the host dashboard (never in the repo).
 
 ## Team
 Team SmartZ — Zahid Ahmed (leader) + Vinay C · Built 11–12 Nov 2026 in the AgentX 24-hour build · Python, Flask, Gemini API, HTML
