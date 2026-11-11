@@ -8,7 +8,7 @@ An AI agent, not a chatbot. It plans, uses real tools, and gives you a fix plan 
 ## Pages (separate, in order)
 1. `/` — **Landing:** paste a link, click "Check this link". Nothing else on the page.
 2. `/permissions` — **Permission Guard:** tick what the app asks for (Location / Contacts / SMS / Camera / Microphone), or skip this step.
-3. `/result` — **Verdict + fix:** Safe / Suspicious / Dangerous link score, **overall phone safety score** (link score minus 10 per risky permission, max −20), Gemini explanation in simple words, 3-step fix plan, and the permission flags.
+3. `/result` — **Verdict + fix:** Safe / Suspicious / Dangerous link score, **overall phone safety score** (link score minus a trust-based penalty per risky permission — trusted 5/max 15, unknown 10/30, suspicious 15/30, dangerous 20/40), Gemini explanation in simple words, 3-step fix plan, and the permission flags.
 4. `/health` — **Optional:** Device Health Score from free storage and outdated apps.
 
 ## What it does
@@ -16,7 +16,7 @@ An AI agent, not a chatbot. It plans, uses real tools, and gives you a fix plan 
 2. **Gemini API (real call)** — explains the verdict in simple words and gives a 3-step fix plan. Tries gemini-3.8-flash, then gemini-3.5-flash-lite, then gemini-2.5-flash (Google limits 2.5 to projects that already used it).
 3. **Permission Guard** — flags risky app permissions (Location / Contacts / SMS).
 4. **Device Health Score** — simple score from free storage and outdated apps.
-5. **Overall phone safety score** — link score minus 10 for each risky permission flagged (max −20). Example: google.com 100 with Location + Contacts + SMS flagged = **80/100**.
+5. **Overall phone safety score (v4.2 trust algorithm)** — link score minus a trust-based penalty per risky permission: trusted sites 5 each (max 15, so they stay in 85–100), unknown sites 10 each (max 30), suspicious links 15 each (max 30), dangerous links 20 each (max 40). Examples: google.com 100 with Location + Contacts + SMS flagged = **85/100**; an unknown clean link with the same permissions = 70/100; bit.ly 75 with 3 risky permissions = 45/100; a dangerous link with any risky permission = 0/100. Trust only counts after the link passes the safety checks — a dangerous link is dangerous whatever its host.
 5. **You decide** — the agent gives the verdict and a clear fix plan (block sender, delete message, report it). Nothing runs automatically; you follow the plan.
 
 ## Demo links

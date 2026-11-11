@@ -3,7 +3,9 @@ Separate pages, in order:
   Page 1  /             - landing: paste a link, click "Check this link".
   Page 2  /permissions  - Permission Guard: tick what the app asks for (or skip).
   Page 3  /result       - Safe / Suspicious / Dangerous + overall phone safety score
-                          (link score minus 10 per risky permission, max -20)
+                          (link score minus a trust-based penalty per risky
+                          permission: trusted 5/max 15, unknown 10/30,
+                          suspicious 15/30, dangerous 20/40)
                           + Gemini explanation + fix plan.
   Page 4  /health       - optional Device Health Score.
 Run: pip install -r requirements.txt  ->  python app.py  ->  open http://127.0.0.1:5000
@@ -11,6 +13,7 @@ Gemini key comes only from .env file. Never paste the key in chat or GitHub.
 """
 import os
 import requests
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 from flask import Flask, request, render_template_string, redirect, url_for, session
 from link_checker import check_link
@@ -22,6 +25,57 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 # Nov 2026: Google serves gemini-2.5-flash only to projects that already used it.
 # New keys get 404 on 2.5, so try the current models first, 2.5 last.
 MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
+
+# --- Trust tiers for the overall score (v4.2, designed for this project) ---
+# A trusted site is a well-known, verified domain. Trust only counts AFTER the
+# link passes the safety checks — a dangerous link is dangerous whatever its host.
+TRUSTED_DOMAINS = {
+    "google.com", "youtube.com", "gmail.com",
+    "amazon.com", "amazon.in", "flipkart.com",
+    "facebook.com", "instagram.com", "whatsapp.com", "linkedin.com",
+    "x.com", "twitter.com", "github.com", "stackoverflow.com",
+    "microsoft.com", "apple.com", "mozilla.org", "wikipedia.org",
+    "netflix.com", "spotify.com",
+    "paytm.com", "phonepe.com", "pay.google.com",
+    "sbi.co.in", "onlinesbi.sbi", "hdfcbank.com", "icicibank.com",
+    "axisbank.com", "kotak.com", "pnb.co.in", "bankofbaroda.in",
+    "canarabank.com", "unionbankofindia.co.in", "indianbank.in",
+    "yesbank.in", "idfcfirstbank.com", "federalbank.co.in",
+    "rblbank.com", "bandhanbank.com",
+    "irctc.co.in", "uidai.gov.in", "incometax.gov.in", "digilocker.gov.in",
+    "gov.in",
+}
+
+def trust_tier(url, link_score):
+    """Trusted / Unknown / Suspicious / Dangerous — by host and link score."""
+    try:
+        host = urlparse(url).netloc.lower().split("@")[-1].split(":")[0]
+    except Exception:
+        host = ""
+    if link_score < 50:
+        return "dangerous"
+    if link_score < 80:
+        return "suspicious"
+    if any(host == d or host.endswith("." + d) for d in TRUSTED_DOMAINS):
+        return "trusted"
+    return "unknown"
+
+# Points lost per risky permission, and the most permissions can cost.
+# Trusted sites lose least, so they stay in 85-100 even when they ask for
+# permissions. Unknown and suspicious links lose more, because asking for
+# sensitive permissions from an untrusted source is a bigger red flag.
+TIER_PENALTY = {
+    "trusted": (5, 15),
+    "unknown": (10, 30),
+    "suspicious": (15, 30),
+    "dangerous": (20, 40),
+}
+TIER_TEXT = {
+    "trusted": "Trusted site — 5 points per risky permission, max 15",
+    "unknown": "Unknown site — 10 points per risky permission, max 30",
+    "suspicious": "Suspicious link — 15 points per risky permission, max 30",
+    "dangerous": "Dangerous link — 20 points per risky permission, max 40",
+}
 
 def ask_gemini(prompt):
     """Real Gemini API call. Tries each model until one answers."""
@@ -147,7 +201,7 @@ RESULT = """
 <div>✨ <b>Tool 2 done:</b> Gemini API explained it in simple words</div>
 <div>✅ <b>Done:</b> Fix plan shown — block sender, delete message, report it</div></div>
 <div class="judge-note" style="margin-top:12px"><b>Overall phone safety: {{ overall }} / 100 — {{ overall_label }}</b><br>
-{% if chosen %}<small>Link score {{ score }} − {{ deduction }} for {{ risky|length }} risky permission(s) (10 points each, max 20) = {{ overall }}</small>
+{% if chosen %}<small>{{ tier_text }}<br>Link score {{ score }} − {{ deduction }} for {{ risky|length }} risky permission(s) = {{ overall }}</small>
 {% else %}<small>Permission check skipped, so the overall score is the link score.</small>{% endif %}</div>
 <h3>✨ Gemini explanation</h3><pre>{{ gemini }}</pre>
 <h3>🛠️ Fix plan — what to do next</h3><pre>{{ fix }}</pre>
@@ -163,7 +217,7 @@ RESULT = """
 {% endif %}
 </div>
 
-<div class="card judge-note"><b>For judges — what to watch:</b> 1) Paste a link → agent plans out loud. 2) Real tool scores it. 3) Real Gemini explains it. 4) Fix plan appears with clear next steps — block sender, delete message, report it. Gemini already gives the verdict, so no extra approval click is needed. Overall phone safety = link score minus 10 per risky permission (max 20).</div>
+<div class="card judge-note"><b>For judges — what to watch:</b> 1) Paste a link → agent plans out loud. 2) Real tool scores it. 3) Real Gemini explains it. 4) Fix plan appears with clear next steps — block sender, delete message, report it. Gemini already gives the verdict, so no extra approval click is needed. Overall phone safety = link score minus a trust-based penalty per risky permission — trusted 5 (max 15), unknown 10 (max 30), suspicious 15 (max 30), dangerous 20 (max 40).</div>
 <p class="nav"><a href="/health">Optional: check device health →</a> &nbsp;·&nbsp; <a href="/restart">Check another link ↺</a></p>
 """
 
@@ -214,10 +268,15 @@ def result():
         fix = ask_gemini(f"Give a 3-step fix plan for this link. Link: {url}. Verdict: {label} {score}/100. Plain words, no jargon.")
         res = {"url": url, "score": score, "label": label, "reasons": reasons, "gemini": gemini, "fix": fix}
         session["result"] = res
-    # Overall phone safety: the link score minus 10 per risky permission flagged (max -20).
+    # Overall phone safety (v4.2): link score minus a trust-based penalty per risky
+    # permission. Trusted sites lose least (5 each, max 15) so they stay in 85-100;
+    # unknown, suspicious and dangerous links lose more — asking for sensitive
+    # permissions from an untrusted source is a bigger red flag.
     # The link score itself never changes — google.com is clean, so it stays 100.
     risky = session.get("risky", [])
-    deduction = min(20, 10 * len(risky))
+    tier = trust_tier(url, res["score"])
+    per, cap = TIER_PENALTY[tier]
+    deduction = min(cap, per * len(risky))
     overall = max(0, res["score"] - deduction)
     overall_label = "Safe" if overall >= 80 else ("Suspicious" if overall >= 50 else "Dangerous")
     return render_template_string(
@@ -226,6 +285,7 @@ def result():
         gemini=res["gemini"], fix=res["fix"],
         chosen=session.get("perms", []), risky=risky,
         overall=overall, overall_label=overall_label, deduction=deduction,
+        tier_text=TIER_TEXT[tier],
     )
 
 @app.route("/health", methods=["GET", "POST"])
