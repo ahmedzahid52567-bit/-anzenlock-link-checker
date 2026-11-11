@@ -1,4 +1,9 @@
-"""AnzenLock Agent v4 - Team SmartZ, AgentX PS-07. 24-hour build 11-12 Nov 2026.
+"""AnzenLock Agent v4.3 - Team SmartZ, AgentX PS-07. 24-hour build 11-12 Nov 2026.
+v4.3 fix (11 Nov evening): bare links like google.com are normalised to
+https:// before scoring — before this, google.com was read as http:// and
+lost 15 points, and the trust check saw no host at all (overall 55 instead
+of 85). The agent trace also no longer claims Gemini explained anything
+when no key is set.
 Separate pages, in order:
   Page 1  /             - landing: paste a link, click "Check this link".
   Page 2  /permissions  - Permission Guard: tick what the app asks for (or skip).
@@ -12,6 +17,7 @@ Run: pip install -r requirements.txt  ->  python app.py  ->  open http://127.0.0
 Gemini key comes only from .env file. Never paste the key in chat or GitHub.
 """
 import os
+import re
 import requests
 from urllib.parse import urlparse
 from dotenv import load_dotenv
@@ -76,6 +82,16 @@ TIER_TEXT = {
     "suspicious": "Suspicious link — 15 points per risky permission, max 30",
     "dangerous": "Dangerous link — 20 points per risky permission, max 40",
 }
+
+def normalize_url(raw):
+    """Make a pasted link a full URL. Bare domains like google.com or
+    bit.ly/abc get https:// so the checker scores them the same as the full
+    link — without this, google.com was read as http:// and lost 15 points,
+    and the trust check saw no host at all (overall 55 instead of 85)."""
+    url = (raw or "").strip()
+    if url and not re.match(r"^https?://", url, re.I):
+        url = "https://" + url
+    return url
 
 def ask_gemini(prompt):
     """Real Gemini API call. Tries each model until one answers."""
@@ -198,8 +214,9 @@ RESULT = """
 <ul class="reasons">{% for x in reasons %}<li>{{ x }}</li>{% endfor %}</ul>
 <div class="trace"><div>🧠 <b>Agent plan:</b> Run checker → Ask Gemini → Show fix plan → You follow it</div>
 <div>🛠️ <b>Tool 1 done:</b> Link Checker scored {{ score }}/100</div>
-<div>✨ <b>Tool 2 done:</b> Gemini API explained it in simple words</div>
-<div>✅ <b>Done:</b> Fix plan shown — block sender, delete message, report it</div></div>
+{% if gemini_ok %}<div>✨ <b>Tool 2 done:</b> Gemini API explained it in simple words</div>
+<div>✅ <b>Done:</b> Fix plan shown — block sender, delete message, report it</div>
+{% else %}<div>✨ <b>Tool 2 skipped:</b> Gemini key not set — add it in .env to get the explanation and fix plan</div>{% endif %}</div>
 <div class="judge-note" style="margin-top:12px"><b>Overall phone safety: {{ overall }} / 100 — {{ overall_label }}</b><br>
 {% if chosen %}<small>{{ tier_text }}<br>Link score {{ score }} − {{ deduction }} for {{ risky|length }} risky permission(s) = {{ overall }}</small>
 {% else %}<small>Permission check skipped, so the overall score is the link score.</small>{% endif %}</div>
@@ -233,7 +250,7 @@ HEALTH = """
 @app.route("/", methods=["GET", "POST"])
 def landing():
     if request.method == "POST":
-        url = request.form.get("url", "").strip()
+        url = normalize_url(request.form.get("url", ""))
         if not url:
             return render_template_string(page("Check a link", LANDING, 1), error="Paste a link first.", url=url)
         session["url"] = url
@@ -279,13 +296,15 @@ def result():
     deduction = min(cap, per * len(risky))
     overall = max(0, res["score"] - deduction)
     overall_label = "Safe" if overall >= 80 else ("Suspicious" if overall >= 50 else "Dangerous")
+    # Honest trace: only claim Gemini explained it when it actually answered.
+    gemini_ok = not (res["gemini"].startswith("Gemini key not set yet") or res["gemini"].startswith("Gemini call failed"))
     return render_template_string(
         page("Your result", RESULT, 3),
         url=url, score=res["score"], label=res["label"], reasons=res["reasons"],
         gemini=res["gemini"], fix=res["fix"],
         chosen=session.get("perms", []), risky=risky,
         overall=overall, overall_label=overall_label, deduction=deduction,
-        tier_text=TIER_TEXT[tier],
+        tier_text=TIER_TEXT[tier], gemini_ok=gemini_ok,
     )
 
 @app.route("/health", methods=["GET", "POST"])
