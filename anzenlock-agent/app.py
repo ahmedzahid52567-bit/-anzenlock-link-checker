@@ -1,6 +1,6 @@
 """AnzenLock Agent - Team SmartZ, AgentX PS-07. 24-hour build 11-12 Nov 2026.
 Run: pip install -r requirements.txt  ->  python app.py  ->  open http://127.0.0.1:5000
-Agent flow: You ask -> Agent plans -> Agent checks (link checker tool + Gemini) -> Fix plan -> YOU confirm.
+Agent flow: You ask -> Agent plans -> Agent checks (link checker tool + Gemini) -> Fix plan -> YOU follow it.
 Gemini key comes only from .env file. Never paste the key in chat or GitHub.
 """
 import os
@@ -105,14 +105,14 @@ small{color:var(--muted)}
 <div class="wrap">
 <div class="hero"><div class="shield">🛡️</div>
 <h1>AnzenLock Agent</h1>
-<p class="sub">Team SmartZ · AgentX PS-07 Open Track · An AI agent, not a chatbot — it plans, uses real tools, and waits for your confirmation.</p>
-<div class="badges"><span class="badge">✅ Link Checker — real tool</span><span class="badge">✅ Gemini API — real call</span><span class="badge">✅ Human confirmation</span><span class="badge">⏱️ 5-min demo ready</span></div>
+<p class="sub">Team SmartZ · AgentX PS-07 Open Track · An AI agent, not a chatbot — it plans, uses real tools, and gives you a fix plan to follow.</p>
+<div class="badges"><span class="badge">✅ Link Checker — real tool</span><span class="badge">✅ Gemini API — real call</span><span class="badge">✅ Fix plan included</span><span class="badge">⏱️ 5-min demo ready</span></div>
 <div class="flow">
 <div class="step {{'active' if result else ''}}"><div class="n">1</div><b>You ask</b><span>Paste a link</span></div>
 <div class="step {{'active' if result else ''}}"><div class="n">2</div><b>Agent plans</b><span>Check → Explain → Fix</span></div>
 <div class="step {{'active' if result else ''}}"><div class="n">3</div><b>Tools run</b><span>Checker + Gemini</span></div>
 <div class="step {{'active' if result else ''}}"><div class="n">4</div><b>Fix plan</b><span>3 clear steps</span></div>
-<div class="step {{'active' if result else ''}}"><div class="n">5</div><b>You confirm</b><span>Nothing auto-fixed</span></div>
+<div class="step {{'active' if result else ''}}"><div class="n">5</div><b>You decide</b><span>Follow the fix plan</span></div>
 </div></div>
 
 <div class="card"><h2>🔗 1. Check a link — live demo</h2>
@@ -129,14 +129,12 @@ small{color:var(--muted)}
 <circle class="bg" cx="55" cy="55" r="46"/><circle class="fg" cx="55" cy="55" r="46" stroke-dasharray="289" stroke-dashoffset="{{289 - 289*result[0]/100}}"/></svg>
 <div><h3 class="{{result[1]}}">{{result[1]}} — {{result[0]}} / 100</h3><small>Tool 1: Link Checker · rule-based, tested</small></div></div>
 <ul class="reasons">{% for x in result[2] %}<li>{{x}}</li>{% endfor %}</ul>
-<div class="trace"><div>🧠 <b>Agent plan:</b> Run checker → Ask Gemini → Show fix plan → Wait for you</div>
+<div class="trace"><div>🧠 <b>Agent plan:</b> Run checker → Ask Gemini → Show fix plan → You follow it</div>
 <div>🛠️ <b>Tool 1 done:</b> Link Checker scored {{result[0]}}/100</div>
 <div>✨ <b>Tool 2 done:</b> Gemini API explained it in simple words</div>
-<div>⏸️ <b>Waiting:</b> Your confirmation — nothing is fixed automatically</div></div>
+<div>✅ <b>Done:</b> Fix plan shown — block sender, delete message, report it</div></div>
 <h3>✨ Gemini explanation</h3><pre>{{gemini}}</pre>
-<h3>🛠️ Fix plan — needs your confirmation</h3><pre>{{fix}}</pre>
-<form method="post"><input type="hidden" name="url" value="{{q}}"><input type="hidden" name="confirm" value="yes"><button>✅ Yes, I confirm this fix plan</button></form>
-{% if confirmed %}<p class="judge-note"><b>✅ Confirmed by you.</b> In the demo, say the next action: block sender, delete message, report it.</p>{% endif %}
+<h3>🛠️ Fix plan — what to do next</h3><pre>{{fix}}</pre>
 {% endif %}</div>
 
 <div class="grid2">
@@ -155,7 +153,7 @@ small{color:var(--muted)}
 {% if health is not none %}<p><span class="score-big">{{health}} / 100</span><br><small>Health score — higher is safer</small></p>{% endif %}</div>
 </div>
 
-<div class="card judge-note"><b>For judges — what to watch in 5 minutes:</b> 1) Paste a link → agent plans out loud. 2) Real tool scores it. 3) Real Gemini explains it. 4) Fix plan appears, but nothing happens until you click Confirm. That human step is the point — an agent, not a chatbot, and not auto-fix.</div>
+<div class="card judge-note"><b>For judges — what to watch in 5 minutes:</b> 1) Paste a link → agent plans out loud. 2) Real tool scores it. 3) Real Gemini explains it. 4) Fix plan appears with clear next steps — block sender, delete message, report it. Gemini already gives the verdict, so no extra approval click is needed.</div>
 <p style="text-align:center"><small>Team SmartZ — Zahid Ahmed + Vinay C · Built 11 Nov 2026 in the AgentX 24-hour build · Flask + Gemini API</small></p>
 </div>
 <script>
@@ -171,7 +169,7 @@ document.querySelectorAll('button,a,input,label').forEach(el=>{el.addEventListen
 @app.route("/", methods=["GET", "POST"])
 def home():
     q = request.form.get("url", "")
-    result = None; gemini = ""; fix = ""; confirmed = False
+    result = None; gemini = ""; fix = ""
     perms = ""; storage = request.form.get("storage", ""); outdated = request.form.get("outdated", "")
     health = None
     if request.method == "POST" and q:
@@ -179,7 +177,6 @@ def home():
         result = (score, label, reasons)
         gemini = ask_gemini(f"Explain this link check in simple words for a normal phone user. Link: {q}. Verdict: {label} {score}/100. Reasons: {'; '.join(reasons)}. Keep it to 4 short lines.")
         fix = ask_gemini(f"Give a 3-step fix plan for this link. Link: {q}. Verdict: {label} {score}/100. Plain words, no jargon.")
-        confirmed = request.form.get("confirm") == "yes"
     if request.method == "POST" and request.form.get("perm"):
         chosen = request.form.getlist("perm")
         risky = [p for p in chosen if p in ("Location", "Contacts", "SMS")]
@@ -189,7 +186,7 @@ def home():
             health = max(0, min(100, int(storage) - int(outdated or 0) * 5))
         except ValueError:
             health = None
-    return render_template_string(PAGE, q=q, result=result, gemini=gemini, fix=fix, confirmed=confirmed, perms=perms, storage=storage, outdated=outdated, health=health)
+    return render_template_string(PAGE, q=q, result=result, gemini=gemini, fix=fix, perms=perms, storage=storage, outdated=outdated, health=health)
 
 if __name__ == "__main__":
     # Local: http://127.0.0.1:5000  |  Hosting (SnapDeploy etc.): uses $PORT and 0.0.0.0

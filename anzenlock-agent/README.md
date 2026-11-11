@@ -1,16 +1,16 @@
 # AnzenLock Agent — Team SmartZ | AgentX PS-07
 
-An AI agent, not a chatbot. It plans, uses real tools, and waits for your confirmation before any fix.
+An AI agent, not a chatbot. It plans, uses real tools, and gives you a fix plan to follow.
 
 **Problem:** people lose money clicking scam links in SMS and WhatsApp.
-**Flow:** You ask → Agent plans → Agent checks → Fix plan → You confirm.
+**Flow:** You ask → Agent plans → Agent checks → Fix plan → You follow it.
 
 ## What it does
 1. **Link Checker (real tool)** — scores a link Safe / Suspicious / Dangerous (100 / 75 / 15 on the tested demos).
 2. **Gemini API (real call)** — explains the verdict in simple words and gives a 3-step fix plan.
 3. **Permission Guard** — flags risky app permissions (Location / Contacts / SMS).
 4. **Device Health Score** — simple score from free storage and outdated apps.
-5. **Human confirmation** — nothing is fixed automatically. The fix plan only runs after you click Confirm.
+5. **You decide** — the agent gives the verdict and a clear fix plan (block sender, delete message, report it). Nothing runs automatically; you follow the plan.
 
 ## Demo links (1-click in the app)
 - Safe: https://google.com
