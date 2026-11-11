@@ -2,7 +2,9 @@
 Separate pages, in order:
   Page 1  /             - landing: paste a link, click "Check this link".
   Page 2  /permissions  - Permission Guard: tick what the app asks for (or skip).
-  Page 3  /result       - Safe / Suspicious / Dangerous + Gemini explanation + fix plan.
+  Page 3  /result       - Safe / Suspicious / Dangerous + overall phone safety score
+                          (link score minus 10 per risky permission, max -20)
+                          + Gemini explanation + fix plan.
   Page 4  /health       - optional Device Health Score.
 Run: pip install -r requirements.txt  ->  python app.py  ->  open http://127.0.0.1:5000
 Gemini key comes only from .env file. Never paste the key in chat or GitHub.
@@ -144,6 +146,9 @@ RESULT = """
 <div>🛠️ <b>Tool 1 done:</b> Link Checker scored {{ score }}/100</div>
 <div>✨ <b>Tool 2 done:</b> Gemini API explained it in simple words</div>
 <div>✅ <b>Done:</b> Fix plan shown — block sender, delete message, report it</div></div>
+<div class="judge-note" style="margin-top:12px"><b>Overall phone safety: {{ overall }} / 100 — {{ overall_label }}</b><br>
+{% if chosen %}<small>Link score {{ score }} − {{ deduction }} for {{ risky|length }} risky permission(s) (10 points each, max 20) = {{ overall }}</small>
+{% else %}<small>Permission check skipped, so the overall score is the link score.</small>{% endif %}</div>
 <h3>✨ Gemini explanation</h3><pre>{{ gemini }}</pre>
 <h3>🛠️ Fix plan — what to do next</h3><pre>{{ fix }}</pre>
 </div>
@@ -158,7 +163,7 @@ RESULT = """
 {% endif %}
 </div>
 
-<div class="card judge-note"><b>For judges — what to watch:</b> 1) Paste a link → agent plans out loud. 2) Real tool scores it. 3) Real Gemini explains it. 4) Fix plan appears with clear next steps — block sender, delete message, report it. Gemini already gives the verdict, so no extra approval click is needed.</div>
+<div class="card judge-note"><b>For judges — what to watch:</b> 1) Paste a link → agent plans out loud. 2) Real tool scores it. 3) Real Gemini explains it. 4) Fix plan appears with clear next steps — block sender, delete message, report it. Gemini already gives the verdict, so no extra approval click is needed. Overall phone safety = link score minus 10 per risky permission (max 20).</div>
 <p class="nav"><a href="/health">Optional: check device health →</a> &nbsp;·&nbsp; <a href="/restart">Check another link ↺</a></p>
 """
 
@@ -209,11 +214,18 @@ def result():
         fix = ask_gemini(f"Give a 3-step fix plan for this link. Link: {url}. Verdict: {label} {score}/100. Plain words, no jargon.")
         res = {"url": url, "score": score, "label": label, "reasons": reasons, "gemini": gemini, "fix": fix}
         session["result"] = res
+    # Overall phone safety: the link score minus 10 per risky permission flagged (max -20).
+    # The link score itself never changes — google.com is clean, so it stays 100.
+    risky = session.get("risky", [])
+    deduction = min(20, 10 * len(risky))
+    overall = max(0, res["score"] - deduction)
+    overall_label = "Safe" if overall >= 80 else ("Suspicious" if overall >= 50 else "Dangerous")
     return render_template_string(
         page("Your result", RESULT, 3),
         url=url, score=res["score"], label=res["label"], reasons=res["reasons"],
         gemini=res["gemini"], fix=res["fix"],
-        chosen=session.get("perms", []), risky=session.get("risky", []),
+        chosen=session.get("perms", []), risky=risky,
+        overall=overall, overall_label=overall_label, deduction=deduction,
     )
 
 @app.route("/health", methods=["GET", "POST"])
